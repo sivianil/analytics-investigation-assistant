@@ -15,6 +15,7 @@ Validation date: 2026-09-22.
 | Live API | Liveness, bearer authentication, readiness and semantic retrieval checks passed |
 | Local model | Ollama qwen3.5:4b generated and executed Python against the full dataset |
 | Live Qwen counts | All four counts matched the independent baseline; 37.34 seconds |
+| Live Qwen period comparison | Acceptance failed: wrong output key, incorrect narrative arithmetic and unsupported currency symbol; not validated for unattended complex reasoning |
 | Astra availability | Model metadata endpoint recognizes gpt-6-astra |
 | Astra answer evaluation | Responses API returned credit_balance_exhausted; no completed answer claimed |
 
@@ -36,3 +37,11 @@ incorrect analysis; these checks validate specific questions, not universal accu
 Multi-tenant security, public penetration testing, high availability, recovery,
 production load capacity and universal answer correctness have not been certified.
 See DEPLOYMENT.md for the remaining acceptance scope.
+
+The period-comparison trial repaired an initial Python syntax error and returned
+computed period totals, but used `net_signed_line_value` instead of the requested
+`net` key. Its final prose also misstated the 2011 sales-to-net gap and introduced
+a dollar symbol despite unspecified currency. Successful execution/evidence IDs
+do not establish that every narrative claim is correct. Review complex answers
+against execution output before business use. `scripts.live_comparison` is an
+acceptance probe and currently fails for this recorded local-model trial.

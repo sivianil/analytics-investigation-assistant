@@ -8,7 +8,9 @@ execution references. Complex investigations can revise failed code within fixed
 **Local-first:** Ollama runs the Apache-2.0 Qwen3.5-4B model on your machine without
 API credits. GPT-6 Astra remains an optional provider for a funded OpenAI account.
 The default model and embeddings run locally. See [validation](docs/VALIDATION.md)
-for the tested scope and production acceptance limits. Model weights, private data,
+for the tested scope and production acceptance limits. The live count evaluation
+passed; a harder period comparison failed accuracy acceptance. Complex answers
+require review against the attached execution evidence. Model weights, private data,
 credentials and investigation traces are not shipped in this repository.
 
 ## Architecture
