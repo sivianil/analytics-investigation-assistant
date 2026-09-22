@@ -20,7 +20,11 @@ def documents(context):
         'grain': context['row_grain'], 'schema': context['schema'],
         'cautions': context['cautions']}, ensure_ascii=False)}]
     for i, report in enumerate(context['quality']['sheets']):
-        docs.append({'id': f'quality-sheet-{i+1}', 'text': json.dumps(report, ensure_ascii=False)})
+        # Keep descriptive policies, not answer-bearing counts. Otherwise a small
+        # model may repeat a cached summary and misrepresent it as a live scan.
+        policy = {key: report[key] for key in ['sheet', 'missing_policy', 'outlier_policy', 'deduplicate'] if key in report}
+        policy['verification'] = 'Compute all counts and metrics from /data/input. This context contains no current totals.'
+        docs.append({'id': f'quality-sheet-{i+1}', 'text': json.dumps(policy, ensure_ascii=False)})
     definitions = {
         'returns': 'is_return is true for a C-prefixed invoice or negative quantity. Count invoice lines, invoices and customers separately. Returns are preserved, and signed line_value is quantity times unit_price.',
         'sales': 'For positive sales choose and disclose a filter, commonly quantity > 0 and unit_price > 0 and not is_return. Net signed line value includes negative returns. Neither is audited revenue; currency unspecified.',
@@ -57,7 +61,7 @@ class ContextStore:
         identity = {'dataset_sha256': fingerprint(self.settings.dataset),
                     'context_sha256': fingerprint(self.settings.context_file),
                     'embedding_model': self.settings.embedding_model,
-                    'dimensions': self.settings.embedding_dimensions, 'version': 2}
+                    'dimensions': self.settings.embedding_dimensions, 'version': 3}
         suffix = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:24]
         collection = 'analytics_' + suffix
         if not self.client.collection_exists(collection):
@@ -83,7 +87,8 @@ class ContextStore:
     def validate(self, full_hash=False):
         manifest = json.loads(self.manifest_path.read_text())
         stat = self.settings.dataset.stat()
-        if (manifest['embedding_model'] != self.settings.embedding_model
+        if (manifest.get('version') != 3
+            or manifest['embedding_model'] != self.settings.embedding_model
             or manifest['dimensions'] != self.settings.embedding_dimensions
             or manifest['dataset_size'] != stat.st_size
             or manifest['dataset_mtime_ns'] != stat.st_mtime_ns

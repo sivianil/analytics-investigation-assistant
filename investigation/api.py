@@ -1,6 +1,7 @@
 import hmac
 import logging
 import subprocess
+import httpx
 from contextlib import asynccontextmanager
 from uuid import UUID
 
@@ -81,9 +82,15 @@ def create_app(settings=None, store=None, investigator=None):
             command = ['docker'] + (['--context', settings.docker_context] if settings.docker_context else [])
             subprocess.run(command + ['image', 'inspect', settings.sandbox_image],
                            check=True, capture_output=True, timeout=10)
+            if settings.model_provider == 'ollama':
+                with httpx.Client(base_url=settings.ollama_url, timeout=5, trust_env=False) as client:
+                    response = client.get('/api/tags')
+                    response.raise_for_status()
+                    if not any(item['name'] == settings.ollama_model for item in response.json()['models']):
+                        raise RuntimeError('Configured local model is not installed')
         except Exception:
-            raise HTTPException(status_code=503, detail='Index or sandbox unavailable') from None
-        return {'status': 'ready', 'model': settings.openai_model}
+            raise HTTPException(status_code=503, detail='Index, sandbox or local model unavailable') from None
+        return {'status': 'ready', 'model': settings.model_name, 'provider': settings.model_provider}
 
     @app.post('/v1/investigations', status_code=202, dependencies=[Depends(authorize)])
     def investigate(payload: Question):

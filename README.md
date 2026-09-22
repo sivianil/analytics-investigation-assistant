@@ -1,16 +1,15 @@
 # Analytics Investigation Assistant
 
-An authenticated analytics service using **GPT-6 Astra**, **Qdrant**, and isolated
+An authenticated analytics service using **local Qwen3.5-4B**, **Qdrant**, and isolated
 Python execution. It prepares Online Retail II data, retrieves relevant schema and
 metric definitions, computes evidence over the full dataset, and answers with
 execution references. Complex investigations can revise failed code within fixed limits.
 
-**Release status:** deployment-ready candidate for one organization on one host.
-Automated tests, live Docker isolation, full-dataset computation and local Qdrant
-indexing have been exercised. Live Astra answer validation is blocked by the current
-OpenAI account's exhausted API credits. See [validation](docs/VALIDATION.md).
-This repository ships the application; Astra remains an API-hosted model, not
-downloadable model weights.
+**Local-first:** Ollama runs the Apache-2.0 Qwen3.5-4B model on your machine without
+API credits. GPT-6 Astra remains an optional provider for a funded OpenAI account.
+The default model and embeddings run locally. See [validation](docs/VALIDATION.md)
+for the tested scope and production acceptance limits. Model weights, private data,
+credentials and investigation traces are not shipped in this repository.
 
 ## Architecture
 
@@ -18,7 +17,7 @@ downloadable model weights.
 flowchart LR
     U[Authorized question] --> API[Authenticated API and bounded job queue]
     API --> Q[Qdrant context retrieval]
-    Q --> M[GPT-6 Astra / Responses API]
+    Q --> M[Local Qwen / optional Astra]
     M --> S[Fresh isolated Python container]
     D[Prepared read-only dataset] --> S
     S --> E[Computed evidence or error]
@@ -26,8 +25,9 @@ flowchart LR
     M --> A[Answer with execution references]
 ```
 
-- **Reasoning:** `gpt-6-astra`, `high` effort, structured Responses API actions,
-  provider retries/timeouts, output limits and a cumulative token budget.
+- **Reasoning:** `qwen3.5:4b` through Ollama's native structured-output API by default.
+  Bounded context, output and cumulative tokens; no automatic cloud fallback.
+  Optional `gpt-6-astra` uses the Responses API with `high` reasoning effort.
 - **Retrieval:** Qdrant with local `BAAI/bge-small-en-v1.5` embeddings (384 dimensions).
   No OpenAI credits are needed for local embeddings. `text-embedding-3-small` is
   optional. Versioned collections include dataset/context hashes and embedding
@@ -45,9 +45,9 @@ flowchart LR
 
 ## Start on this Mac
 
-The `analytics` Colima VM and authenticated Qdrant container were installed for this
-task. Private `.env` contains local service tokens. The existing OpenAI key is read
-from `OPENAI_API_KEY`; it was not copied into Git.
+The `analytics` Colima VM, Qdrant, Ollama and Qwen model are installed on the task
+machine. Private `.env` contains local service tokens and selects `MODEL_PROVIDER=ollama`.
+Local inference never receives or forwards an OpenAI key.
 
 ```sh
 colima start --profile analytics --cpu 2 --memory 4 --disk 20 --vm-type vz --mount-type virtiofs --activate=false
@@ -60,16 +60,20 @@ is still running, use it rather than starting another process. `.env` selects
 
 ## Clean installation
 
-Requires Python 3.12, Docker and a funded OpenAI project with Astra access.
+Requires Python 3.12, Docker and [Ollama](https://ollama.com/download).
+The tested Mac has 16 GB RAM. Qwen3.5-4B is roughly a 3.4 GB download; leave memory
+for the 4 GB Docker VM and other applications. Local speed depends on hardware.
 
 ```sh
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --require-hashes -r requirements.lock
 .venv/bin/python scripts/configure_local.py
+ollama pull qwen3.5:4b
 ```
 
-Set `OPENAI_API_KEY` through a secret manager or shell environment. The setup script
-generates local assistant/Qdrant tokens without displaying them. See `.env.example`.
+Start Ollama (the desktop app or `ollama serve`) before using the assistant. No OpenAI
+key is needed in local mode. The setup script generates assistant/Qdrant tokens
+without displaying them. See `.env.example`.
 On Linux/ordinary Docker remove `DOCKER_CONTEXT` from `.env`. For a Mac without a
 runtime, run `sh scripts/setup_macos.sh`.
 
@@ -86,6 +90,19 @@ docker --context colima-analytics build -t retail-agent-sandbox:local .
 Omit Docker `--context` on Linux. The local embedding model downloads on first
 indexing and is cached in `state/embedding-cache`. Preserve that cache with its
 index or rebuild after upgrading the model. Output preparation directories must be new.
+
+### Provider options
+
+`MODEL_PROVIDER=ollama` and `OLLAMA_MODEL=qwen3.5:4b` are defaults. Ollama is restricted
+to a loopback HTTP endpoint, uses a 32,768-token context, and has a 300-second request
+timeout. `OLLAMA_THINK=false` favors faster structured actions; set it to `true` for
+additional model thinking at higher latency. A 4B model can make reasoning or coding
+mistakes and is not an equivalent replacement for a frontier model on every query.
+
+To use Astra, set `MODEL_PROVIDER=openai` and supply `OPENAI_API_KEY` securely. The
+previous key's API quota was exhausted; this does not affect local inference.
+Selecting OpenAI embeddings separately also requires a key. There is no automatic
+provider switch. Restart the API after changing configuration.
 
 ## Ask a question
 
@@ -116,8 +133,9 @@ boundary. A full queue returns 429. Provider failures do not switch models or
 fabricate answers.
 
 Endpoints: `GET /healthz`; authenticated `GET /readyz`, `POST /v1/investigations`,
-`GET /v1/investigations/{uuid}`. Readiness checks index/image availability, not API
-billing. There is no public arbitrary-file or remote-database execution endpoint.
+`GET /v1/investigations/{uuid}`. Readiness checks the index/image and configured local
+model installation; it does not certify OpenAI billing or model answer quality.
+There is no public arbitrary-file or remote-database execution endpoint.
 
 ## Preparation policy
 
@@ -165,7 +183,7 @@ and public internet hosting need deployment-specific work.
 .venv/bin/python -m scripts.smoke_sandbox
 .venv/bin/python -m scripts.smoke_dataset
 .venv/bin/python -m scripts.smoke_api
-# Paid end-to-end model evaluation after funding the OpenAI account:
+# Full model/retrieval/container/answer evaluation (local by default):
 .venv/bin/python -m scripts.live_investigation
 ```
 
@@ -175,6 +193,8 @@ model caches and execution traces are ignored by Git.
 
 ## References
 
+- [Qwen3.5-4B and its Apache-2.0 license](https://ollama.com/library/qwen3.5:4b)
+- [Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs)
 - [GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra)
 - [Astra/Responses guidance](https://developers.openai.com/api/docs/guides/latest-model)
 - [Structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs)

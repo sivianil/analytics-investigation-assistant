@@ -1,6 +1,7 @@
 from typing import Literal
 import json
 import threading
+import httpx
 
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict
@@ -42,6 +43,44 @@ class AstraModel:
         if response.status != 'completed' or response.output_parsed is None:
             raise RuntimeError('Model response incomplete or refused')
         return response.output_parsed
+
+
+class OllamaModel:
+    """Native local inference. Never forwards the OpenAI key or uses a cloud fallback."""
+    def __init__(self, settings, client=None):
+        self.settings = settings
+        self.client = client
+        self.total_tokens = 0
+
+    def next(self, messages):
+        remaining = self.settings.max_total_tokens - self.total_tokens
+        # Bytes conservatively bound tokens; reserve space for structured output.
+        input_reserve = len(json.dumps(messages, ensure_ascii=False).encode()) + 512
+        available = min(remaining, self.settings.ollama_num_ctx) - input_reserve
+        if available < 256:
+            raise RuntimeError('Local model context or investigation token budget exhausted')
+        payload = {'model': self.settings.ollama_model, 'messages': messages,
+                   'stream': False, 'format': Action.model_json_schema(),
+                   'think': self.settings.ollama_think, 'keep_alive': '2m',
+                   'options': {'num_ctx': self.settings.ollama_num_ctx,
+                               'num_predict': min(4096, self.settings.max_output_tokens, available),
+                               'temperature': 0}}
+        if self.client is not None:
+            response = self.client.post('/api/chat', json=payload)
+        else:
+            with httpx.Client(base_url=self.settings.ollama_url,
+                              timeout=self.settings.ollama_timeout, trust_env=False) as client:
+                response = client.post('/api/chat', json=payload)
+        response.raise_for_status()
+        data = response.json()
+        self.total_tokens += data.get('prompt_eval_count', 0) + data.get('eval_count', 0)
+        if not data.get('done') or data.get('done_reason') == 'length':
+            raise RuntimeError('Local model response incomplete; reduce the query or raise the output limit')
+        return Action.model_validate_json(data['message']['content'])
+
+
+def make_model(settings):
+    return OllamaModel(settings) if settings.model_provider == 'ollama' else AstraModel(settings)
 
 
 class Embeddings:

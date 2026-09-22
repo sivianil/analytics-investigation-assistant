@@ -2,7 +2,7 @@
 
 ## Topology and lifecycle
 
-Run one Python 3.12 coordinator, an authenticated private Qdrant, and a dedicated
+Run one Python 3.12 coordinator, local Ollama, an authenticated private Qdrant, and a dedicated
 Docker runtime. API: 127.0.0.1:8000. Qdrant: 127.0.0.1:6333. For remote access use
 an authenticated TLS reverse proxy or VPN. Do not publicly forward either service.
 The supplied Colima VM has 4 GB RAM; `.env` sets one concurrent job. Add RAM before
@@ -26,8 +26,8 @@ its `analytics-qdrant-data` volume.
 
 ## Credentials and troubleshooting
 
-Use environment/secret-manager values for OPENAI_API_KEY, ASSISTANT_API_TOKEN and
-QDRANT_API_KEY. Never pass keys in source, command arguments or issues. Rotate the
+Use environment/secret-manager values for ASSISTANT_API_TOKEN and QDRANT_API_KEY.
+OPENAI_API_KEY is required only for the optional OpenAI provider or embeddings. Never pass keys in source, command arguments or issues. Rotate the
 API token by updating its secret and restarting the coordinator. Recreate Qdrant
 with its new key and existing volume when rotating its credential.
 
@@ -47,11 +47,14 @@ Execution continues through the explicit `colima-analytics` context.
 
 Monitor liveness/readiness, failed jobs, queue saturation, disk and provider spending.
 Logs contain IDs/status/error types; authenticated results hold audit traces.
-Readiness covers Qdrant and the sandbox image, not provider credit balance. Exhausted
-credits require funding and an explicit resubmission.
+Readiness covers Qdrant, the sandbox image and installation of the configured local
+Ollama model. Optional OpenAI credit balance is not checked; exhausted credits require
+funding and an explicit resubmission.
 
 Default limits: 8 actions, 6,000 output tokens/call, 80,000 cumulative model tokens,
-90-second provider timeout with two SDK retries, 60-second execution and 32 KB output.
+60-second execution, and a 300-second local model timeout. Local Qwen uses a
+32,768-token context, at most 4,096 output tokens and 4 KB execution output.
+Optional Astra uses a 90-second timeout with two SDK retries and 32 KB execution output.
 Input byte reservations are conservative. Provider project budgets are the financial
 enforcement boundary. The application never buys credits or silently switches models.
 
@@ -67,6 +70,7 @@ a pinned base digest and separate lock. Regenerate locks with
 `uv pip compile --universal --generate-hashes` during reviewed updates; rerun tests,
 dependency audit and live isolation tests. Deploy a reviewed version/tag.
 
-Before business production use, complete funded Astra end-to-end validation,
-representative accuracy acceptance, backup/restore, TLS/network setup and load tests.
+Before business production use, complete representative accuracy acceptance,
+backup/restore, TLS/network setup and load tests. If selecting Astra, also complete
+funded end-to-end validation of that provider.
 These deployment-specific acceptance steps are not established by unit tests.

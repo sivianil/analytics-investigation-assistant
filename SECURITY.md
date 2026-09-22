@@ -29,6 +29,12 @@ policies. The LLM receives questions, retrieved context and bounded execution ou
 Local embeddings keep retrieval text local; optional OpenAI embeddings send it to
 that API. Prepared data, state, traces and caches are excluded from Git.
 
+Local inference uses Ollama at a loopback-only URL, with no authentication header,
+OpenAI key or environment proxy forwarded. Cloud model tags are rejected. Keep
+Ollama bound to localhost; it is a trusted host service, not the untrusted-code
+sandbox. Model-generated Python still runs only in Docker. Selecting the OpenAI
+provider explicitly sends the question/context/evidence to that API.
+
 The SQLAlchemy connector is trusted ingestion, requiring read-only credentials,
 approved queries and server-side timeouts. Generated SQLite/Python runs only inside
 the sandbox. No automatic remote database writes are available.

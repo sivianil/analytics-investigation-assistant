@@ -12,7 +12,7 @@ from investigation.config import Settings
 from investigation.engine import Investigator
 from investigation.jobs import Jobs, QueueFull
 from investigation.model import Action, AstraModel
-from investigation.retrieval import ContextStore
+from investigation.retrieval import ContextStore, documents
 
 
 @pytest.fixture
@@ -46,6 +46,13 @@ def test_qdrant_index_search_and_dataset_change(settings):
     settings.dataset.write_text('{"quantity":200}\n')
     with pytest.raises(RuntimeError, match='rebuild'):
         store.search('returns')
+
+
+def test_retrieval_does_not_leak_answer_counts():
+    docs = documents({'row_grain':'line','schema':{},'cautions':[], 'quality':{'sheets':[
+        {'input_rows':123456789, 'outlier_rows':123456789, 'sheet':'Year', 'missing_policy':'keep'}]}})
+    assert '123456789' not in json.dumps(docs)
+    assert 'missing_policy' in json.dumps(docs)
 
 
 def test_embedding_config_change_rejected(settings):

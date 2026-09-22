@@ -8,7 +8,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
-    openai_api_key: SecretStr
+    model_provider: Literal['ollama', 'openai'] = 'ollama'
+    openai_api_key: SecretStr | None = None
+    ollama_url: str = 'http://127.0.0.1:11434'
+    ollama_model: str = 'qwen3.5:4b'
+    ollama_timeout: int = Field(default=300, ge=10, le=600)
+    ollama_num_ctx: int = Field(default=32768, ge=4096, le=65536)
+    ollama_think: bool = False
     assistant_api_token: SecretStr = Field(min_length=32)
     openai_model: Literal['gpt-6-astra'] = 'gpt-6-astra'
     reasoning_effort: Literal['low', 'medium', 'high', 'xhigh', 'max'] = 'high'
@@ -29,6 +35,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode='after')
     def secure_remote_qdrant(self):
+        if (self.model_provider == 'openai' or self.embedding_model == 'text-embedding-3-small') and (
+                self.openai_api_key is None or not self.openai_api_key.get_secret_value()):
+            raise ValueError('OPENAI_API_KEY is required for OpenAI inference or embeddings')
+        local = urlsplit(self.ollama_url)
+        if local.scheme != 'http' or local.hostname not in {'127.0.0.1', 'localhost', '::1'} or local.username or local.password:
+            raise ValueError('Ollama must use a loopback HTTP URL without credentials')
+        if 'cloud' in self.ollama_model.lower():
+            raise ValueError('Use a locally installed Ollama model, not a cloud model')
         address = urlsplit(self.qdrant_url)
         if address.scheme not in {'http', 'https'} or not address.hostname or address.username or address.password:
             raise ValueError('Qdrant URL must be HTTP(S) without embedded credentials')
@@ -36,6 +50,10 @@ class Settings(BaseSettings):
             if address.scheme != 'https' or self.qdrant_api_key is None:
                 raise ValueError('Remote Qdrant requires HTTPS and an API key')
         return self
+
+    @property
+    def model_name(self):
+        return self.ollama_model if self.model_provider == 'ollama' else self.openai_model
 
     @property
     def dataset(self):

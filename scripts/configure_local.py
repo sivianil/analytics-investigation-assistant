@@ -7,6 +7,7 @@ path = Path('.env')
 if path.exists():
     raise SystemExit('.env already exists; preserving it')
 text = '\n'.join([
+    'MODEL_PROVIDER=ollama', 'OLLAMA_MODEL=qwen3.5:4b',
     '# OPENAI_API_KEY is inherited from your environment, not copied here.',
     'ASSISTANT_API_TOKEN=' + secrets.token_urlsafe(48),
     'QDRANT_API_KEY=' + secrets.token_urlsafe(48),
