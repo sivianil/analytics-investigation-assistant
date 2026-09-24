@@ -1,5 +1,5 @@
 -r requirements.txt
-openai==2.54.0
+openai==3.16.2
 qdrant-client==1.19.1
 fastapi==0.141.1
 uvicorn==0.53.0
